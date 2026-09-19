@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="360" viewBox="0 0 1200 360" role="img" aria-labelledby="title desc">
+  <title id="title">Watch the Sentinel AML demo</title>
+  <desc id="desc">Click this cover to play the full walkthrough on Jam.</desc>
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0e1d32"/>
+      <stop offset="1" stop-color="#183a4b"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="360" rx="20" fill="url(#background)"/>
+  <rect x="0" y="32" width="6" height="296" rx="3" fill="#62e4c2"/>
+  <g font-family="Arial, Helvetica, sans-serif">
+    <text x="66" y="78" fill="#62e4c2" font-size="18" font-weight="700" letter-spacing="4">SENTINEL AML</text>
+    <text x="62" y="154" fill="#ffffff" font-size="56" font-weight="700">See Sentinel in action</text>
+    <text x="66" y="206" fill="#c0d1df" font-size="25">Transactions. Detection. Investigation.</text>
+    <text x="66" y="294" fill="#ffffff" font-size="23" font-weight="700">Watch the demo on Jam →</text>
+  </g>
+  <circle cx="1020" cy="180" r="76" fill="#62e4c2"/>
+  <path d="M 1000 142 L 1000 218 L 1060 180 Z" fill="#0e1d32"/>
+</svg>

@@ -258,7 +258,7 @@ Detect suspicious patterns, prioritize alerts, and support analyst investigation
 
 Use the fictional CSV dataset in [docs/demo-data](docs/demo-data/README.md).
 
-1. Start the backend and frontend using the [README setup instructions](README.md#run-locally).
+1. Start the backend and frontend using the [setup instructions](docs/getting-started.md#run-locally).
 2. Sign in as an administrator with the configured credentials.
 3. Confirm default rules, the synthetic USD→INR rate of **83.25** effective at the fixture dates, and an active IR country entry.
 4. Import **customers.csv**, then **accounts.csv**, then **transactions.csv** from `docs/demo-data/`. Wait for each job to finish and inspect its failures before starting the dependent import.
