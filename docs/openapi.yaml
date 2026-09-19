@@ -1,0 +1,2590 @@
+---
+openapi: 3.0.3
+info:
+  title: Sentinel AML API
+  version: 1.1.0
+  description: Static API contract for the implementation in this repository. Basic
+    authentication is stateless. Backend-configured users are admin, analyst and viewer;
+    credentials come from environment variables and are never included here. All list
+    responses mask customer identifiers and sensitive narrative fields. Numeric customer
+    IDs support the authorized by-id detail endpoint. VIEWER detail views remain redacted.
+    CSV and JSON batch submission returns 202 with a durable job to poll. Detection
+    occurs atomically for each processed transaction. No external
+    SAR filing API is implemented.
+servers:
+- url: http://localhost:8080/api/v1
+  description: Local development; use HTTPS for deployment
+security:
+- basicAuth: []
+paths:
+  "/admin/alerts/regenerate":
+    get:
+      operationId: previewAlertRegeneration
+      summary: Preview stored transactions, alerts and case links before regeneration
+      x-roles: [ADMIN]
+      responses:
+        '200':
+          description: Current counts; counts may change before regeneration begins
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [transactions, alerts, caseLinks]
+                properties:
+                  transactions: {type: integer, format: int64}
+                  alerts: {type: integer, format: int64}
+                  caseLinks: {type: integer, format: int64}
+        '401':
+          "$ref": "#/components/responses/Unauthorized"
+        '403':
+          "$ref": "#/components/responses/Forbidden"
+    post:
+      operationId: regenerateAlerts
+      summary: Replace all alerts using saved rules and all stored transactions
+      x-roles: [ADMIN]
+      description: >-
+        Explicit demo rebuild, including reviewed alerts. Preserves transactions, customers,
+        accounts, cases and audit history. Removes and audits existing case-alert links.
+        New alerts have new references and start OPEN without assignments or dispositions.
+        Uses original transaction timestamps and a saved rule snapshot. Atomic rollback
+        preserves previous alerts and links on failure. PostgreSQL writes wait during the
+        synchronous rebuild; reads remain available. No transaction ingestion is performed.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [confirmation]
+              properties:
+                confirmation: {type: string, enum: [REGENERATE]}
+      responses:
+        '200':
+          description: Rebuild committed successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [transactionsEvaluated, alertsDeleted, alertsCreated, caseLinksRemoved]
+                properties:
+                  transactionsEvaluated: {type: integer, format: int64}
+                  alertsDeleted: {type: integer, format: int64}
+                  alertsCreated: {type: integer, format: int64}
+                  caseLinksRemoved: {type: integer, format: int64}
+        '401':
+          "$ref": "#/components/responses/Unauthorized"
+        '403':
+          "$ref": "#/components/responses/Forbidden"
+        default:
+          "$ref": "#/components/responses/Problem"
+  "/session":
+    get:
+      operationId: getSession
+      summary: Verify credentials and return the current identity
+      tags:
+      - Session
+      description: 'Allowed roles: ADMIN, ANALYST, VIEWER.'
+      x-roles:
+      - ADMIN
+      - ANALYST
+      - VIEWER
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/SessionResponse"
+        '401':
+          "$ref": "#/components/responses/Unauthorized"
+        '403':
+          "$ref": "#/components/responses/Forbidden"
+        default:
+          "$ref": "#/components/responses/Problem"
+  "/customers":
+    get:
+      operationId: listCustomers
+      summary: List customers
+      tags:
+      - Customers
+      description: 'Allowed roles: ADMIN, ANALYST, VIEWER.'
+      x-roles:
+      - ADMIN
+      - ANALYST
+      - VIEWER
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/PageCustomerResponse"
+        '401':
+          "$ref": "#/components/responses/Unauthorized"
+        '403':
+          "$ref": "#/components/responses/Forbidden"
+        default:
+          "$ref": "#/components/responses/Problem"
+      parameters:
+      - name: page
+        in: query
+        schema:
+          type: integer
+          minimum: 0
+          default: 0
+      - name: size
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          default: 20
+      - name: sort
+        in: query
+        schema:
+          type: array
+          items:
+            type: string
+        style: form
+        explode: true
+        description: Repeat for multiple sorts, e.g. sort=riskScore,desc.
+    post:
+      operationId: createCustomer
+      summary: Create or ingest customer
+      tags:
+      - Customers
+      description: 'Allowed roles: ADMIN.'
+      x-roles:
+      - ADMIN
+      responses:
+        '201':
+          description: Success
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/CustomerResponse"
+        '401':
+          "$ref": "#/components/responses/Unauthorized"
+        '403':
+          "$ref": "#/components/responses/Forbidden"
+        default:
+          "$ref": "#/components/responses/Problem"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/CustomerRequest"
+  "/customers/{customerId}":
+    get:
+      operationId: getCustomer
+      summary: Get customer detail
+      tags:
+      - Customers
+      description: 'Allowed roles: ADMIN, ANALYST.'
+      x-roles:
+      - ADMIN
+      - ANALYST
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/CustomerResponse"
+        '401':
+          "$ref": "#/components/responses/Unauthorized"
+        '403':
+          "$ref": "#/components/responses/Forbidden"
+        default:
+          "$ref": "#/components/responses/Problem"
+      parameters:
+      - name: customerId
+        in: path
+        required: true
+        schema:
+          type: string
+  "/accounts":
+    get:
+      operationId: listAccounts
+      summary: List accounts
+      tags:
+      - Accounts
+      description: 'Allowed roles: ADMIN, ANALYST, VIEWER.'
+      x-roles:
+      - ADMIN
+      - ANALYST
+      - VIEWER
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/PageAccountResponse"
+        '401':
+          "$ref": "#/components/responses/Unauthorized"
+        '403':
+          "$ref": "#/components/responses/Forbidden"
+        default:
+          "$ref": "#/components/responses/Problem"
+      parameters:
+      - name: page
+        in: query
+        schema:
+          type: integer
+          minimum: 0
+          default: 0
+      - name: size
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          default: 20
+      - name: sort
+        in: query
+        schema:
+          type: array
+          items:
+            type: string
+        style: form
+        explode: true
+        description: Repeat for multiple sorts, e.g. sort=riskScore,desc.
+    post:
+      operationId: createAccount
+      summary: Create or ingest account
+      tags:
+      - Accounts
+      description: 'Allowed roles: ADMIN.'
+      x-roles:
+      - ADMIN
+      responses:
+        '201':
+          description: Success
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/AccountResponse"
+        '401':
+          "$ref": "#/components/responses/Unauthorized"
+        '403':
+          "$ref": "#/components/responses/Forbidden"
+        default:
+          "$ref": "#/components/responses/Problem"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/AccountRequest"
+  "/accounts/{accountId}":
+    get:
+      operationId: getAccount
+      summary: Get account detail
+      tags:
+      - Accounts
+      description: 'Allowed roles: ADMIN, ANALYST.'
+      x-roles:
+      - ADMIN
+      - ANALYST
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/AccountResponse"
+        '401':
+          "$ref": "#/components/responses/Unauthorized"
+        '403':
+          "$ref": "#/components/responses/Forbidden"
+        default:
+          "$ref": "#/components/responses/Problem"
+      parameters:
+      - name: accountId
+        in: path
+        required: true
+        schema:
+          type: string
+  "/transactions":
+    get:
+      operationId: listTransactions
+      summary: List transactions
+      tags:
+      - Transactions
+      description: 'Allowed roles: ADMIN, ANALYST, VIEWER.'
+      x-roles:
+      - ADMIN
+      - ANALYST
+      - VIEWER
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/PageTransactionResponse"
+        '401':
+          "$ref": "#/components/responses/Unauthorized"
+        '403':
+          "$ref": "#/components/responses/Forbidden"
+        default:
+          "$ref": "#/components/responses/Problem"
+      parameters:
+      - name: page
+        in: query
+        schema:
+          type: integer
+          minimum: 0
+          default: 0
+      - name: size
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          default: 20
+      - name: sort
+        in: query
+        schema:
+          type: array
+          items:
+            type: string
+        style: form
+        explode: true
+        description: Repeat for multiple sorts, e.g. sort=riskScore,desc.
+    post:
+      operationId: createTransaction
+      summary: Create or ingest transaction
+      tags:
+      - Transactions
+      description: 'Allowed roles: ADMIN.'
+      x-roles:
+      - ADMIN
+      responses:
+        '201':
+          description: Success
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/TransactionResponse"
+        '401':
+          "$ref": "#/components/responses/Unauthorized"
+        '403':
+          "$ref": "#/components/responses/Forbidden"
+        default:
+          "$ref": "#/components/responses/Problem"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/TransactionRequest"
+  "/transactions/{transactionRef}":
+    get:
+      operationId: getTransaction
+      summary: Get transaction detail
+      tags:
+      - Transactions
+      description: 'Allowed roles: ADMIN, ANALYST.'
+      x-roles:
+      - ADMIN
+      - ANALYST
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/TransactionResponse"
+        '401':
+          "$ref": "#/components/responses/Unauthorized"
+        '403':
+          "$ref": "#/components/responses/Forbidden"
+        default:
+          "$ref": "#/components/responses/Problem"
+      parameters:
+      - name: transactionRef
+        in: path
+        required: true
+        schema:
+          type: string
+  "/customers/by-id/{id}":
+    get:
+      operationId: getCustomerByInternalId
+      summary: Get authorized customer detail by numeric internal ID
+      tags:
+      - Customers
+      description: 'Allowed roles: ADMIN, ANALYST.'
+      x-roles:
+      - ADMIN
+      - ANALYST
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/CustomerResponse"
+        '401':
+          "$ref": "#/components/responses/Unauthorized"
+        '403':
+          "$ref": "#/components/responses/Forbidden"
+        default:
+          "$ref": "#/components/responses/Problem"
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+  "/customers/{customerId}/accounts":
+    get:
+      operationId: listCustomerAccounts
+      summary: List a customer’s accounts
+      tags:
+      - Customers
+      description: 'Allowed roles: ADMIN, ANALYST, VIEWER.'
+      x-roles:
+      - ADMIN
+      - ANALYST
+      - VIEWER
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/PageAccountResponse"
+        '401':
+          "$ref": "#/components/responses/Unauthorized"
+        '403':
+          "$ref": "#/components/responses/Forbidden"
+        default:
+          "$ref": "#/components/responses/Problem"
+      parameters:
+      - name: customerId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: page
+        in: query
+        schema:
+          type: integer
+          minimum: 0
+          default: 0
+      - name: size
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          default: 20
+      - name: sort
+        in: query
+        schema:
+          type: array
+          items:
+            type: string
+        style: form
+        explode: true
+        description: Repeat for multiple sorts, e.g. sort=riskScore,desc.
+  "/accounts/{accountId}/transactions":
+    get:
+      operationId: listAccountTransactions
+      summary: List account transactions
+      tags:
+      - Accounts
+      description: 'Allowed roles: ADMIN, ANALYST, VIEWER.'
+      x-roles:
+      - ADMIN
+      - ANALYST
+      - VIEWER
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/PageTransactionResponse"
+        '401':
+          "$ref": "#/components/responses/Unauthorized"
+        '403':
+          "$ref": "#/components/responses/Forbidden"
+        default:
+          "$ref": "#/components/responses/Problem"
+      parameters:
+      - name: accountId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: page
+        in: query
+        schema:
+          type: integer
+          minimum: 0
+          default: 0
+      - name: size
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          default: 20
+      - name: sort
+        in: query
+        schema:
+          type: array
+          items:
+            type: string
+        style: form
+        explode: true
+        description: Repeat for multiple sorts, e.g. sort=riskScore,desc.
+  "/transactions/batch":
+    post:
+      operationId: batchTransactions
+      summary: Ingest a transaction batch
+      tags:
+      - Transactions
+      description: 'ADMIN only. Returns a queued job; poll until COMPLETED or FAILED. Maximum 10000 records by default.'
+      x-roles:
+      - ADMIN
+      responses:
+        '202':
+          description: Input persisted and queued; poll the Location URL for completion.
+          headers:
+            Location:
+              description: Job status URL
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/IngestionJobResponse"
+        '413':
+          description: Input exceeds the configured size or record limit
+        '429':
+          description: Import queue is full; retry later
+        '401':
+          "$ref": "#/components/responses/Unauthorized"
+        '403':
+          "$ref": "#/components/responses/Forbidden"
+        default:
+          "$ref": "#/components/responses/Problem"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              maxItems: 10000
+              items:
+                "$ref": "#/components/schemas/TransactionRequest"
+  "/transactions/stream":
+    post:
+      operationId: streamTransaction
+      summary: Ingest an idempotent transaction
+      tags:
+      - Transactions
+      description: ADMIN only. First ingestion returns 201; replay of the same transactionRef
+        returns its existing record with 200. Transaction persistence and detection
+        commit atomically.
+      x-roles:
+      - ADMIN
+      responses:
+        '201':
+          description: Success
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/TransactionResponse"
+        '401':
+          "$ref": "#/components/responses/Unauthorized"
+        '403':
+          "$ref": "#/components/responses/Forbidden"
+        default:
+          "$ref": "#/components/responses/Problem"
+        '200':
+          description: Existing transaction replayed; no duplicate ingestion
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/TransactionResponse"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/TransactionRequest"
+  "/alerts":
+    get:
+      operationId: listAlerts
+      summary: List alerts
+      tags:
+      - Alerts
+      description: 'Allowed roles: ADMIN, ANALYST, VIEWER.'
+      x-roles:
+      - ADMIN
+      - ANALYST
+      - VIEWER
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/PageAlertResponse"
+        '401':
+          "$ref": "#/components/responses/Unauthorized"
+        '403':
+          "$ref": "#/components/responses/Forbidden"
+        default:
+          "$ref": "#/components/responses/Problem"
+      parameters:
+      - name: page
+        in: query
+        schema:
+          type: integer
+          minimum: 0
+          default: 0
+      - name: size
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          default: 20
+      - name: sort
+        in: query
+        schema:
+          type: array
+          items:
+            type: string
+        style: form
+        explode: true
+        description: Repeat for multiple sorts, e.g. sort=riskScore,desc.
+      - name: status
+        in: query
+        schema:
+          "$ref": "#/components/schemas/AlertStatus"
+  "/alerts/{alertRef}":
+    get:
+      operationId: getAlert
+      summary: Get alert detail
+      tags:
+      - Alerts
+      description: 'Allowed roles: ADMIN, ANALYST, VIEWER.'
+      x-roles:
+      - ADMIN
+      - ANALYST
+      - VIEWER
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/AlertResponse"
+        '401':
+          "$ref": "#/components/responses/Unauthorized"
+        '403':
+          "$ref": "#/components/responses/Forbidden"
+        default:
+          "$ref": "#/components/responses/Problem"
+      parameters:
+      - name: alertRef
+        in: path
+        required: true
+        schema:
+          type: string
+  "/alerts/{alertRef}/status":
+    patch:
+      operationId: updateAlertStatus
+      summary: Update alert status and disposition
+      tags:
+      - Alerts
+      description: ADMIN or ANALYST. Authenticated identity is audited. CLEARED/CLOSED
+        alerts and CLOSED/SAR_FILED cases are immutable. A nonblank dispositionReason
+        is required to enter a terminal status.
+      x-roles:
+      - ADMIN
+      - ANALYST
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/AlertResponse"
+        '401':
+          "$ref": "#/components/responses/Unauthorized"
+        '403':
+          "$ref": "#/components/responses/Forbidden"
+        default:
+          "$ref": "#/components/responses/Problem"
+      parameters:
+      - name: alertRef
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/AlertStatusUpdateRequest"
+  "/cases":
+    get:
+      operationId: listCases
+      summary: List cases
+      tags:
+      - Cases
+      description: 'Allowed roles: ADMIN, ANALYST, VIEWER.'
+      x-roles:
+      - ADMIN
+      - ANALYST
+      - VIEWER
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/PageCaseResponse"
+        '401':
+          "$ref": "#/components/responses/Unauthorized"
+        '403':
+          "$ref": "#/components/responses/Forbidden"
+        default:
+          "$ref": "#/components/responses/Problem"
+      parameters:
+      - name: page
+        in: query
+        schema:
+          type: integer
+          minimum: 0
+          default: 0
+      - name: size
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          default: 20
+      - name: sort
+        in: query
+        schema:
+          type: array
+          items:
+            type: string
+        style: form
+        explode: true
+        description: Repeat for multiple sorts, e.g. sort=riskScore,desc.
+      - name: status
+        in: query
+        schema:
+          "$ref": "#/components/schemas/CaseStatus"
+    post:
+      operationId: createCase
+      summary: Create an investigation case
+      tags:
+      - Cases
+      description: 'Allowed roles: ADMIN, ANALYST.'
+      x-roles:
+      - ADMIN
+      - ANALYST
+      responses:
+        '201':
+          description: Success
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/CaseResponse"
+        '401':
+          "$ref": "#/components/responses/Unauthorized"
+        '403':
+          "$ref": "#/components/responses/Forbidden"
+        default:
+          "$ref": "#/components/responses/Problem"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/CaseCreateRequest"
+  "/cases/{caseRef}":
+    get:
+      operationId: getCase
+      summary: Get case detail
+      tags:
+      - Cases
+      description: 'Allowed roles: ADMIN, ANALYST, VIEWER.'
+      x-roles:
+      - ADMIN
+      - ANALYST
+      - VIEWER
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/CaseResponse"
+        '401':
+          "$ref": "#/components/responses/Unauthorized"
+        '403':
+          "$ref": "#/components/responses/Forbidden"
+        default:
+          "$ref": "#/components/responses/Problem"
+      parameters:
+      - name: caseRef
+        in: path
+        required: true
+        schema:
+          type: string
+  "/cases/{caseRef}/status":
+    patch:
+      operationId: updateCaseStatus
+      summary: Update case status and disposition
+      tags:
+      - Cases
+      description: ADMIN or ANALYST. Authenticated identity is audited. CLEARED/CLOSED
+        alerts and CLOSED/SAR_FILED cases are immutable. A nonblank dispositionReason
+        is required to enter a terminal status.
+      x-roles:
+      - ADMIN
+      - ANALYST
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/CaseResponse"
+        '401':
+          "$ref": "#/components/responses/Unauthorized"
+        '403':
+          "$ref": "#/components/responses/Forbidden"
+        default:
+          "$ref": "#/components/responses/Problem"
+      parameters:
+      - name: caseRef
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/CaseStatusUpdateRequest"
+  "/ingestion/customers/batch":
+    post:
+      operationId: importCustomersBatch
+      summary: Import customers JSON batch
+      tags:
+      - Ingestion
+      description: 'ADMIN only. Returns a queued job; poll until COMPLETED or FAILED. Maximum 10000 records by default.'
+      x-roles:
+      - ADMIN
+      responses:
+        '202':
+          description: Input persisted and queued; poll the Location URL for completion.
+          headers:
+            Location:
+              description: Job status URL
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/IngestionJobResponse"
+        '413':
+          description: Input exceeds the configured size or record limit
+        '429':
+          description: Import queue is full; retry later
+        '401':
+          "$ref": "#/components/responses/Unauthorized"
+        '403':
+          "$ref": "#/components/responses/Forbidden"
+        default:
+          "$ref": "#/components/responses/Problem"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              maxItems: 10000
+              items:
+                "$ref": "#/components/schemas/CustomerRequest"
+  "/ingestion/customers/csv":
+    post:
+      operationId: importCustomersCsv
+      summary: Import customers CSV
+      tags:
+      - Ingestion
+      description: ADMIN only. Asynchronous import with persisted progress and row-level errors. Multipart
+        field name is file. CSV headers are snake_case; import customers before accounts
+        before transactions.
+      x-roles:
+      - ADMIN
+      responses:
+        '202':
+          description: Input persisted and queued; poll the Location URL for completion.
+          headers:
+            Location:
+              description: Job status URL
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/IngestionJobResponse"
+        '413':
+          description: Input exceeds the configured size or record limit
+        '429':
+          description: Import queue is full; retry later
+        '401':
+          "$ref": "#/components/responses/Unauthorized"
+        '403':
+          "$ref": "#/components/responses/Forbidden"
+        default:
+          "$ref": "#/components/responses/Problem"
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+              required:
+              - file
+  "/ingestion/accounts/batch":
+    post:
+      operationId: importAccountsBatch
+      summary: Import accounts JSON batch
+      tags:
+      - Ingestion
+      description: 'ADMIN only. Returns a queued job; poll until COMPLETED or FAILED. Maximum 10000 records by default.'
+      x-roles:
+      - ADMIN
+      responses:
+        '202':
+          description: Input persisted and queued; poll the Location URL for completion.
+          headers:
+            Location:
+              description: Job status URL
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/IngestionJobResponse"
+        '413':
+          description: Input exceeds the configured size or record limit
+        '429':
+          description: Import queue is full; retry later
+        '401':
+          "$ref": "#/components/responses/Unauthorized"
+        '403':
+          "$ref": "#/components/responses/Forbidden"
+        default:
+          "$ref": "#/components/responses/Problem"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              maxItems: 10000
+              items:
+                "$ref": "#/components/schemas/AccountRequest"
+  "/ingestion/accounts/csv":
+    post:
+      operationId: importAccountsCsv
+      summary: Import accounts CSV
+      tags:
+      - Ingestion
+      description: ADMIN only. Asynchronous import with persisted progress and row-level errors. Multipart
+        field name is file. CSV headers are snake_case; import customers before accounts
+        before transactions.
+      x-roles:
+      - ADMIN
+      responses:
+        '202':
+          description: Input persisted and queued; poll the Location URL for completion.
+          headers:
+            Location:
+              description: Job status URL
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/IngestionJobResponse"
+        '413':
+          description: Input exceeds the configured size or record limit
+        '429':
+          description: Import queue is full; retry later
+        '401':
+          "$ref": "#/components/responses/Unauthorized"
+        '403':
+          "$ref": "#/components/responses/Forbidden"
+        default:
+          "$ref": "#/components/responses/Problem"
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+              required:
+              - file
+  "/ingestion/transactions/batch":
+    post:
+      operationId: importTransactionsBatch
+      summary: Import transactions JSON batch
+      tags:
+      - Ingestion
+      description: 'ADMIN only. Returns a queued job; poll until COMPLETED or FAILED. Maximum 10000 records by default.'
+      x-roles:
+      - ADMIN
+      responses:
+        '202':
+          description: Input persisted and queued; poll the Location URL for completion.
+          headers:
+            Location:
+              description: Job status URL
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/IngestionJobResponse"
+        '413':
+          description: Input exceeds the configured size or record limit
+        '429':
+          description: Import queue is full; retry later
+        '401':
+          "$ref": "#/components/responses/Unauthorized"
+        '403':
+          "$ref": "#/components/responses/Forbidden"
+        default:
+          "$ref": "#/components/responses/Problem"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              maxItems: 10000
+              items:
+                "$ref": "#/components/schemas/TransactionRequest"
+  "/ingestion/transactions/csv":
+    post:
+      operationId: importTransactionsCsv
+      summary: Import transactions CSV
+      tags:
+      - Ingestion
+      description: ADMIN only. Asynchronous import with persisted progress and row-level errors. Multipart
+        field name is file. CSV headers are snake_case; import customers before accounts
+        before transactions.
+      x-roles:
+      - ADMIN
+      responses:
+        '202':
+          description: Input persisted and queued; poll the Location URL for completion.
+          headers:
+            Location:
+              description: Job status URL
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/IngestionJobResponse"
+        '413':
+          description: Input exceeds the configured size or record limit
+        '429':
+          description: Import queue is full; retry later
+        '401':
+          "$ref": "#/components/responses/Unauthorized"
+        '403':
+          "$ref": "#/components/responses/Forbidden"
+        default:
+          "$ref": "#/components/responses/Problem"
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+              required:
+              - file
+  "/ingestion/errors":
+    get:
+      operationId: listIngestionErrors
+      summary: List persisted ingestion errors
+      tags:
+      - Ingestion
+      description: 'Allowed roles: ADMIN.'
+      x-roles:
+      - ADMIN
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/PageIngestionErrorResponse"
+        '401':
+          "$ref": "#/components/responses/Unauthorized"
+        '403':
+          "$ref": "#/components/responses/Forbidden"
+        default:
+          "$ref": "#/components/responses/Problem"
+      parameters:
+      - name: page
+        in: query
+        schema:
+          type: integer
+          minimum: 0
+          default: 0
+      - name: size
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          default: 20
+      - name: sort
+        in: query
+        schema:
+          type: array
+          items:
+            type: string
+        style: form
+        explode: true
+        description: Repeat for multiple sorts, e.g. sort=riskScore,desc.
+      - name: batchId
+        in: query
+        schema:
+          type: string
+  "/audit":
+    get:
+      operationId: listAuditEvents
+      summary: List append-only audit events
+      tags:
+      - Audit
+      description: 'Allowed roles: ADMIN, ANALYST.'
+      x-roles:
+      - ADMIN
+      - ANALYST
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/PageAuditResponse"
+        '401':
+          "$ref": "#/components/responses/Unauthorized"
+        '403':
+          "$ref": "#/components/responses/Forbidden"
+        default:
+          "$ref": "#/components/responses/Problem"
+      parameters:
+      - name: page
+        in: query
+        schema:
+          type: integer
+          minimum: 0
+          default: 0
+      - name: size
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          default: 20
+      - name: sort
+        in: query
+        schema:
+          type: array
+          items:
+            type: string
+        style: form
+        explode: true
+        description: Repeat for multiple sorts, e.g. sort=riskScore,desc.
+      - name: entityRef
+        in: query
+        schema:
+          type: string
+        description: Exact entity reference; newest events first.
+  "/rules":
+    get:
+      operationId: listRules
+      summary: List configured detection rules
+      tags:
+      - Rules
+      description: 'Allowed roles: ADMIN.'
+      x-roles:
+      - ADMIN
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  "$ref": "#/components/schemas/RuleSettings"
+        '401':
+          "$ref": "#/components/responses/Unauthorized"
+        '403':
+          "$ref": "#/components/responses/Forbidden"
+        default:
+          "$ref": "#/components/responses/Problem"
+  "/rules/{code}":
+    put:
+      operationId: updateRule
+      summary: Update an enabled rule and configuration
+      tags:
+      - Rules
+      description: 'Allowed roles: ADMIN.'
+      x-roles:
+      - ADMIN
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/RuleSettings"
+        '401':
+          "$ref": "#/components/responses/Unauthorized"
+        '403':
+          "$ref": "#/components/responses/Forbidden"
+        default:
+          "$ref": "#/components/responses/Problem"
+      parameters:
+      - name: code
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/RuleUpdate"
+  "/settings/exchange-rates":
+    get:
+      operationId: listExchangeRate
+      summary: List exchange rates
+      tags:
+      - Settings
+      description: 'Allowed roles: ADMIN.'
+      x-roles:
+      - ADMIN
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  "$ref": "#/components/schemas/ExchangeRate"
+        '401':
+          "$ref": "#/components/responses/Unauthorized"
+        '403':
+          "$ref": "#/components/responses/Forbidden"
+        default:
+          "$ref": "#/components/responses/Problem"
+    put:
+      operationId: upsertExchangeRate
+      summary: Create or update exchange rates
+      tags:
+      - Settings
+      description: 'Allowed roles: ADMIN.'
+      x-roles:
+      - ADMIN
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ExchangeRate"
+        '401':
+          "$ref": "#/components/responses/Unauthorized"
+        '403':
+          "$ref": "#/components/responses/Forbidden"
+        default:
+          "$ref": "#/components/responses/Problem"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/RateUpdate"
+  "/settings/high-risk-jurisdictions":
+    get:
+      operationId: listHighRiskJurisdiction
+      summary: List high risk jurisdictions
+      tags:
+      - Settings
+      description: 'Allowed roles: ADMIN.'
+      x-roles:
+      - ADMIN
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  "$ref": "#/components/schemas/HighRiskJurisdiction"
+        '401':
+          "$ref": "#/components/responses/Unauthorized"
+        '403':
+          "$ref": "#/components/responses/Forbidden"
+        default:
+          "$ref": "#/components/responses/Problem"
+    put:
+      operationId: upsertHighRiskJurisdiction
+      summary: Create or update high risk jurisdictions
+      tags:
+      - Settings
+      description: 'Allowed roles: ADMIN.'
+      x-roles:
+      - ADMIN
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/HighRiskJurisdiction"
+        '401':
+          "$ref": "#/components/responses/Unauthorized"
+        '403':
+          "$ref": "#/components/responses/Forbidden"
+        default:
+          "$ref": "#/components/responses/Problem"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/JurisdictionUpdate"
+  "/settings/sanctioned-counterparties":
+    get:
+      operationId: listSanctionedCounterparty
+      summary: List sanctioned counterparties
+      tags:
+      - Settings
+      description: 'Allowed roles: ADMIN.'
+      x-roles:
+      - ADMIN
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  "$ref": "#/components/schemas/SanctionedCounterparty"
+        '401':
+          "$ref": "#/components/responses/Unauthorized"
+        '403':
+          "$ref": "#/components/responses/Forbidden"
+        default:
+          "$ref": "#/components/responses/Problem"
+    put:
+      operationId: upsertSanctionedCounterparty
+      summary: Create or update sanctioned counterparties
+      tags:
+      - Settings
+      description: 'Allowed roles: ADMIN.'
+      x-roles:
+      - ADMIN
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/SanctionedCounterparty"
+        '401':
+          "$ref": "#/components/responses/Unauthorized"
+        '403':
+          "$ref": "#/components/responses/Forbidden"
+        default:
+          "$ref": "#/components/responses/Problem"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/CounterpartyUpdate"
+  "/ingestion/jobs":
+    get:
+      operationId: listIngestionJobs
+      summary: List recent ingestion jobs, newest first
+      tags: [Ingestion]
+      description: ADMIN only. List entries omit final result details; fetch an individual job for errors.
+      x-roles: [ADMIN]
+      parameters:
+      - name: page
+        in: query
+        schema: {type: integer, minimum: 0, default: 0}
+      - name: size
+        in: query
+        schema: {type: integer, minimum: 1, maximum: 500, default: 20}
+      responses:
+        '200':
+          description: Persisted job history
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/PageIngestionJobResponse"
+        '401':
+          "$ref": "#/components/responses/Unauthorized"
+        '403':
+          "$ref": "#/components/responses/Forbidden"
+        default:
+          "$ref": "#/components/responses/Problem"
+  "/ingestion/jobs/{id}":
+    get:
+      operationId: getIngestionJob
+      summary: Get import progress and final or partial results
+      tags: [Ingestion]
+      description: ADMIN only. COMPLETED may include rejected rows; FAILED may include committed rows. CSV totals are unknown until normal completion. Job ID also identifies the error-log batch.
+      x-roles: [ADMIN]
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema: {type: string}
+      responses:
+        '200':
+          description: Current job state
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/IngestionJobResponse"
+        '404':
+          description: Unknown job ID
+        '401':
+          "$ref": "#/components/responses/Unauthorized"
+        '403':
+          "$ref": "#/components/responses/Forbidden"
+        default:
+          "$ref": "#/components/responses/Problem"
+components:
+  securitySchemes:
+    basicAuth:
+      type: http
+      scheme: basic
+  schemas:
+    KycStatus:
+      type: string
+      enum:
+      - PENDING
+      - VERIFIED
+      - REJECTED
+      - EXPIRED
+    IngestionSource:
+      type: string
+      enum:
+      - API
+      - BATCH
+      - BULK_CSV
+      - STREAM
+    AuditAction:
+      type: string
+      enum:
+      - CREATED
+      - UPDATED
+      - STATUS_CHANGED
+      - ASSIGNED
+      - DISPOSITIONED
+      - CLEARED
+      - ESCALATED
+    IngestionErrorType:
+      type: string
+      enum:
+      - MALFORMED
+      - VALIDATION
+      - REFERENTIAL_INTEGRITY
+      - DUPLICATE
+      - PERSISTENCE
+    Severity:
+      type: string
+      enum:
+      - LOW
+      - MEDIUM
+      - HIGH
+      - CRITICAL
+    CaseStatus:
+      type: string
+      enum:
+      - OPEN
+      - INVESTIGATING
+      - PENDING_REVIEW
+      - ESCALATED
+      - SAR_FILED
+      - CLOSED
+    AccountStatus:
+      type: string
+      enum:
+      - ACTIVE
+      - DORMANT
+      - CLOSED
+      - FROZEN
+      - SUSPENDED
+    RiskRating:
+      type: string
+      enum:
+      - LOW
+      - MEDIUM
+      - HIGH
+      - CRITICAL
+    AlertStatus:
+      type: string
+      enum:
+      - OPEN
+      - IN_REVIEW
+      - ESCALATED
+      - CLEARED
+      - CLOSED
+    IngestionEntityType:
+      type: string
+      enum:
+      - CUSTOMER
+      - ACCOUNT
+      - TRANSACTION
+    TransactionResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        transactionRef:
+          type: string
+        accountId:
+          type: string
+        customerId:
+          type: string
+        amount:
+          type: number
+        currency:
+          type: string
+        amountBase:
+          type: number
+        baseCurrency:
+          type: string
+        transactionType:
+          type: string
+        direction:
+          type: string
+        counterpartyName:
+          type: string
+        counterpartyAccount:
+          type: string
+        counterpartyCountry:
+          type: string
+        channel:
+          type: string
+        jurisdiction:
+          type: string
+        description:
+          type: string
+        transactionTime:
+          type: string
+          format: date-time
+        ingestionSource:
+          "$ref": "#/components/schemas/IngestionSource"
+        createdAt:
+          type: string
+          format: date-time
+    TransactionRequest:
+      type: object
+      properties:
+        transactionRef:
+          type: string
+          maxLength: 100
+          minLength: 1
+        accountId:
+          type: string
+          maxLength: 64
+          minLength: 1
+        amount:
+          type: number
+          minimum: 0
+          exclusiveMinimum: true
+          multipleOf: 0.01
+          maximum: 100000000000000000
+          exclusiveMaximum: true
+          description: Positive decimal amount with at most 17 integer digits and
+            2 fractional digits.
+        currency:
+          type: string
+          minLength: 1
+          pattern: "^[A-Za-z]{3}$"
+        transactionType:
+          type: string
+          maxLength: 30
+        direction:
+          type: string
+          maxLength: 10
+        counterpartyName:
+          type: string
+          maxLength: 255
+        counterpartyAccount:
+          type: string
+          maxLength: 100
+        counterpartyCountry:
+          type: string
+          maxLength: 3
+        channel:
+          type: string
+          maxLength: 50
+        jurisdiction:
+          type: string
+          maxLength: 3
+        description:
+          type: string
+          maxLength: 500
+        transactionTime:
+          type: string
+          format: date-time
+      required:
+      - transactionRef
+      - accountId
+      - amount
+      - currency
+      - transactionTime
+    IngestionJobResponse:
+      type: object
+      required: [jobId, batchId, entityType, status, processed, succeeded, failed, createdAt, statusUrl]
+      properties:
+        jobId: {type: string}
+        batchId: {type: string, description: Same as jobId}
+        entityType: {type: string, enum: [CUSTOMER, ACCOUNT, TRANSACTION]}
+        sourceName: {type: string, nullable: true}
+        status: {type: string, enum: [QUEUED, RUNNING, COMPLETED, FAILED]}
+        totalRecords: {type: integer, nullable: true, description: Unknown for CSV until normal completion}
+        processed: {type: integer, minimum: 0}
+        succeeded: {type: integer, minimum: 0}
+        failed: {type: integer, minimum: 0}
+        createdAt: {type: string, format: date-time}
+        startedAt: {type: string, format: date-time, nullable: true}
+        finishedAt: {type: string, format: date-time, nullable: true}
+        failureMessage: {type: string, nullable: true}
+        statusUrl: {type: string}
+        result:
+          nullable: true
+          description: Present on terminal job detail responses; partial on FAILED. Null while queued/running or in list entries.
+          allOf:
+          - "$ref": "#/components/schemas/IngestionResult"
+    PageIngestionJobResponse:
+      type: object
+      properties:
+        content:
+          type: array
+          items:
+            "$ref": "#/components/schemas/IngestionJobResponse"
+        page: {type: integer}
+        size: {type: integer}
+        totalElements: {type: integer, format: int64}
+        totalPages: {type: integer}
+        last: {type: boolean}
+    IngestionResult:
+      type: object
+      properties:
+        batchId:
+          type: string
+        entityType:
+          "$ref": "#/components/schemas/IngestionEntityType"
+        sourceName:
+          type: string
+        totalRecords:
+          type: integer
+          format: int32
+        succeeded:
+          type: integer
+          format: int32
+        failed:
+          type: integer
+          format: int32
+        errors:
+          type: array
+          items:
+            "$ref": "#/components/schemas/IngestionErrorView"
+      description: Synchronous per-record processing. totalRecords/succeeded/failed
+        are full counts; errors contains at most 200 details. Successful records remain
+        committed if other records fail.
+    IngestionErrorResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        batchId:
+          type: string
+        entityType:
+          "$ref": "#/components/schemas/IngestionEntityType"
+        sourceName:
+          type: string
+        sourceReference:
+          type: string
+        rawRecord:
+          type: string
+        errorType:
+          "$ref": "#/components/schemas/IngestionErrorType"
+        errorMessage:
+          type: string
+        occurredAt:
+          type: string
+          format: date-time
+    IngestionErrorView:
+      type: object
+      properties:
+        sourceReference:
+          type: string
+        errorType:
+          "$ref": "#/components/schemas/IngestionErrorType"
+        message:
+          type: string
+        rawRecord:
+          type: string
+    AlertStatusUpdateRequest:
+      type: object
+      properties:
+        status:
+          "$ref": "#/components/schemas/AlertStatus"
+        assignedTo:
+          type: string
+          maxLength: 100
+        disposition:
+          type: string
+          maxLength: 50
+        dispositionReason:
+          type: string
+          maxLength: 4000
+        actor:
+          type: string
+          description: Deprecated compatibility field. The server ignores this value
+            and records the authenticated principal.
+          deprecated: true
+      required:
+      - status
+      description: Only ADMIN or ANALYST. Terminal records are immutable. dispositionReason
+        is required for terminal transitions; authenticated principal is the audit
+        actor.
+    AlertResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        alertRef:
+          type: string
+        customerId:
+          type: string
+        accountId:
+          type: string
+        ruleCode:
+          type: string
+        triggeredRules:
+          type: array
+          items:
+            type: string
+        disposition:
+          type: string
+        dispositionReason:
+          type: string
+        title:
+          type: string
+        explanation:
+          type: string
+        riskScore:
+          type: integer
+          format: int32
+        severity:
+          "$ref": "#/components/schemas/Severity"
+        status:
+          "$ref": "#/components/schemas/AlertStatus"
+        dedupKey:
+          type: string
+        assignedTo:
+          type: string
+        transactionRefs:
+          type: array
+          items:
+            type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      description: List views redact customer/account identifiers and narrative fields;
+        authorized detail responses contain explanation and dispositions. triggeredRules
+        contains all combined rule codes.
+    CaseCreateRequest:
+      type: object
+      properties:
+        customerRef:
+          type: string
+        title:
+          type: string
+          maxLength: 255
+          minLength: 1
+        description:
+          type: string
+        priority:
+          "$ref": "#/components/schemas/Severity"
+        assignedTo:
+          type: string
+          maxLength: 100
+        alertRefs:
+          type: array
+          items:
+            type: string
+        actor:
+          type: string
+          maxLength: 100
+          description: Deprecated compatibility field. The server ignores this value
+            and records the authenticated principal.
+          deprecated: true
+      required:
+      - title
+    CaseStatusUpdateRequest:
+      type: object
+      properties:
+        status:
+          "$ref": "#/components/schemas/CaseStatus"
+        disposition:
+          type: string
+          maxLength: 50
+        dispositionReason:
+          type: string
+          maxLength: 4000
+        assignedTo:
+          type: string
+          maxLength: 100
+        actor:
+          type: string
+          description: Deprecated compatibility field. The server ignores this value
+            and records the authenticated principal.
+          deprecated: true
+      required:
+      - status
+      description: Only ADMIN or ANALYST. Terminal records are immutable. dispositionReason
+        is required for terminal transitions; authenticated principal is the audit
+        actor.
+    CaseResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        caseRef:
+          type: string
+        customerId:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+        status:
+          "$ref": "#/components/schemas/CaseStatus"
+        priority:
+          "$ref": "#/components/schemas/Severity"
+        assignedTo:
+          type: string
+        disposition:
+          type: string
+        dispositionReason:
+          type: string
+        alertRefs:
+          type: array
+          items:
+            type: string
+        openedAt:
+          type: string
+          format: date-time
+        closedAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    AccountResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        accountId:
+          type: string
+        customerId:
+          type: string
+        accountType:
+          type: string
+        riskRating:
+          "$ref": "#/components/schemas/RiskRating"
+        accountStatus:
+          "$ref": "#/components/schemas/AccountStatus"
+        currency:
+          type: string
+        openDate:
+          type: string
+          format: date
+        closeDate:
+          type: string
+          format: date
+        branchCode:
+          type: string
+        branchCity:
+          type: string
+        currentBalance:
+          type: number
+        avgMonthlyBalance6m:
+          type: number
+        creditLimit:
+          type: number
+        creditUtilizationPct:
+          type: number
+        overdraftEnabled:
+          type: boolean
+        cardType:
+          type: string
+        jointAccount:
+          type: boolean
+        numLinkedDevices:
+          type: integer
+          format: int32
+        mobileBankingEnrolled:
+          type: boolean
+        lastLoginDate:
+          type: string
+          format: date
+        avgMonthlyTxnCount:
+          type: integer
+          format: int32
+        accountTier:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    AccountRequest:
+      type: object
+      properties:
+        accountId:
+          type: string
+          maxLength: 64
+          minLength: 1
+        customerId:
+          type: string
+          maxLength: 64
+          minLength: 1
+        accountType:
+          type: string
+          maxLength: 30
+        riskRating:
+          "$ref": "#/components/schemas/RiskRating"
+        accountStatus:
+          "$ref": "#/components/schemas/AccountStatus"
+        currency:
+          type: string
+          minLength: 1
+          pattern: "^[A-Za-z]{3}$"
+        openDate:
+          type: string
+          format: date
+        closeDate:
+          type: string
+          format: date
+        branchCode:
+          type: string
+          maxLength: 30
+        branchCity:
+          type: string
+          maxLength: 100
+        currentBalance:
+          type: number
+        avgMonthlyBalance6m:
+          type: number
+        creditLimit:
+          type: number
+        creditUtilizationPct:
+          type: number
+        overdraftEnabled:
+          type: boolean
+        cardType:
+          type: string
+          maxLength: 30
+        jointAccount:
+          type: boolean
+        numLinkedDevices:
+          type: integer
+          format: int32
+        mobileBankingEnrolled:
+          type: boolean
+        lastLoginDate:
+          type: string
+          format: date
+        avgMonthlyTxnCount:
+          type: integer
+          format: int32
+        accountTier:
+          type: string
+          maxLength: 30
+      required:
+      - accountId
+      - customerId
+      - currency
+    CustomerRequest:
+      type: object
+      properties:
+        customerId:
+          type: string
+          maxLength: 64
+          minLength: 1
+        firstName:
+          type: string
+          maxLength: 100
+          minLength: 1
+        lastName:
+          type: string
+          maxLength: 100
+          minLength: 1
+        gender:
+          type: string
+          maxLength: 20
+        dateOfBirth:
+          type: string
+          format: date
+        email:
+          type: string
+          maxLength: 255
+          format: email
+        phoneNumber:
+          type: string
+          maxLength: 50
+        city:
+          type: string
+          maxLength: 100
+        state:
+          type: string
+          maxLength: 100
+        country:
+          type: string
+          maxLength: 3
+        postalCode:
+          type: string
+          maxLength: 20
+        occupation:
+          type: string
+          maxLength: 150
+        annualIncome:
+          type: number
+        maritalStatus:
+          type: string
+          maxLength: 30
+        educationLevel:
+          type: string
+          maxLength: 50
+        employmentStatus:
+          type: string
+          maxLength: 30
+        customerSince:
+          type: string
+          format: date
+        customerSegment:
+          type: string
+          maxLength: 30
+        kycStatus:
+          "$ref": "#/components/schemas/KycStatus"
+        riskRating:
+          "$ref": "#/components/schemas/RiskRating"
+        politicallyExposed:
+          type: boolean
+        preferredChannel:
+          type: string
+          maxLength: 50
+        emailVerified:
+          type: boolean
+        phoneVerified:
+          type: boolean
+        numComplaintsLastYear:
+          type: integer
+          format: int32
+      required:
+      - customerId
+      - firstName
+      - lastName
+    CustomerResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        customerId:
+          type: string
+        firstName:
+          type: string
+        lastName:
+          type: string
+        gender:
+          type: string
+        dateOfBirth:
+          type: string
+          format: date
+        email:
+          type: string
+        phoneNumber:
+          type: string
+        city:
+          type: string
+        state:
+          type: string
+        country:
+          type: string
+        postalCode:
+          type: string
+        occupation:
+          type: string
+        annualIncome:
+          type: number
+        maritalStatus:
+          type: string
+        educationLevel:
+          type: string
+        employmentStatus:
+          type: string
+        customerSince:
+          type: string
+          format: date
+        customerSegment:
+          type: string
+        kycStatus:
+          "$ref": "#/components/schemas/KycStatus"
+        riskRating:
+          "$ref": "#/components/schemas/RiskRating"
+        politicallyExposed:
+          type: boolean
+        preferredChannel:
+          type: string
+        emailVerified:
+          type: boolean
+        phoneVerified:
+          type: boolean
+        numComplaintsLastYear:
+          type: integer
+          format: int32
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      description: List views mask customerId and personal fields. ADMIN/ANALYST can
+        retrieve authorized detail by numeric id or external customerId.
+    PageCustomerResponse:
+      type: object
+      required:
+      - content
+      - page
+      - size
+      - totalElements
+      - totalPages
+      - last
+      properties:
+        content:
+          type: array
+          items:
+            "$ref": "#/components/schemas/CustomerResponse"
+        page:
+          type: integer
+          minimum: 0
+        size:
+          type: integer
+        totalElements:
+          type: integer
+          format: int64
+        totalPages:
+          type: integer
+        last:
+          type: boolean
+    PageAccountResponse:
+      type: object
+      required:
+      - content
+      - page
+      - size
+      - totalElements
+      - totalPages
+      - last
+      properties:
+        content:
+          type: array
+          items:
+            "$ref": "#/components/schemas/AccountResponse"
+        page:
+          type: integer
+          minimum: 0
+        size:
+          type: integer
+        totalElements:
+          type: integer
+          format: int64
+        totalPages:
+          type: integer
+        last:
+          type: boolean
+    PageTransactionResponse:
+      type: object
+      required:
+      - content
+      - page
+      - size
+      - totalElements
+      - totalPages
+      - last
+      properties:
+        content:
+          type: array
+          items:
+            "$ref": "#/components/schemas/TransactionResponse"
+        page:
+          type: integer
+          minimum: 0
+        size:
+          type: integer
+        totalElements:
+          type: integer
+          format: int64
+        totalPages:
+          type: integer
+        last:
+          type: boolean
+    PageAlertResponse:
+      type: object
+      required:
+      - content
+      - page
+      - size
+      - totalElements
+      - totalPages
+      - last
+      properties:
+        content:
+          type: array
+          items:
+            "$ref": "#/components/schemas/AlertResponse"
+        page:
+          type: integer
+          minimum: 0
+        size:
+          type: integer
+        totalElements:
+          type: integer
+          format: int64
+        totalPages:
+          type: integer
+        last:
+          type: boolean
+    PageCaseResponse:
+      type: object
+      required:
+      - content
+      - page
+      - size
+      - totalElements
+      - totalPages
+      - last
+      properties:
+        content:
+          type: array
+          items:
+            "$ref": "#/components/schemas/CaseResponse"
+        page:
+          type: integer
+          minimum: 0
+        size:
+          type: integer
+        totalElements:
+          type: integer
+          format: int64
+        totalPages:
+          type: integer
+        last:
+          type: boolean
+    PageIngestionErrorResponse:
+      type: object
+      required:
+      - content
+      - page
+      - size
+      - totalElements
+      - totalPages
+      - last
+      properties:
+        content:
+          type: array
+          items:
+            "$ref": "#/components/schemas/IngestionErrorResponse"
+        page:
+          type: integer
+          minimum: 0
+        size:
+          type: integer
+        totalElements:
+          type: integer
+          format: int64
+        totalPages:
+          type: integer
+        last:
+          type: boolean
+    SessionResponse:
+      type: object
+      properties:
+        username:
+          type: string
+        roles:
+          type: array
+          items:
+            type: string
+            enum:
+            - ADMIN
+            - ANALYST
+            - VIEWER
+      required:
+      - username
+      - roles
+    RuleSettings:
+      type: object
+      properties:
+        ruleCode:
+          type: string
+          enum:
+          - CTR
+          - STRUCTURING
+          - RAPID_MOVEMENT
+          - HIGH_RISK_JURISDICTION
+          - BEHAVIORAL_DEVIATION
+          - ROUND_NUMBER
+        enabled:
+          type: boolean
+        configuration:
+          type: object
+          additionalProperties: true
+      required:
+      - ruleCode
+      - enabled
+      - configuration
+    RuleUpdate:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        configuration:
+          type: object
+          additionalProperties: true
+      required:
+      - enabled
+      - configuration
+      description: Only known settings are accepted. CTR and HIGH_RISK_JURISDICTION
+        cannot be disabled. Monetary rule thresholds specify currency (USD by default);
+        server normalizes with effective FX rates.
+    RateUpdate:
+      type: object
+      properties:
+        fromCurrency:
+          type: string
+          pattern: "^[A-Za-z]{3}$"
+        toCurrency:
+          type: string
+          pattern: "^[A-Za-z]{3}$"
+        rate:
+          type: number
+          minimum: 1.0e-08
+        effectiveFrom:
+          type: string
+          format: date-time
+      required:
+      - fromCurrency
+      - toCurrency
+      - rate
+      - effectiveFrom
+    JurisdictionUpdate:
+      type: object
+      properties:
+        countryCode:
+          type: string
+          pattern: "^[A-Za-z]{2,3}$"
+        description:
+          type: string
+          maxLength: 255
+        sanctioned:
+          type: boolean
+        effectiveFrom:
+          type: string
+          format: date-time
+        effectiveTo:
+          type: string
+          format: date-time
+          nullable: true
+      required:
+      - countryCode
+      - effectiveFrom
+    CounterpartyUpdate:
+      type: object
+      properties:
+        identifier:
+          type: string
+          minLength: 1
+          maxLength: 255
+        description:
+          type: string
+          maxLength: 500
+        enabled:
+          type: boolean
+      required:
+      - identifier
+    ExchangeRate:
+      allOf:
+      - "$ref": "#/components/schemas/RateUpdate"
+      - type: object
+        properties:
+          id:
+            type: integer
+            format: int64
+    HighRiskJurisdiction:
+      allOf:
+      - "$ref": "#/components/schemas/JurisdictionUpdate"
+      - type: object
+        properties:
+          id:
+            type: integer
+            format: int64
+    SanctionedCounterparty:
+      "$ref": "#/components/schemas/CounterpartyUpdate"
+    AuditResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        entityType:
+          type: string
+        entityRef:
+          type: string
+        action:
+          type: string
+        fromState:
+          type: string
+        toState:
+          type: string
+        actor:
+          type: string
+        details:
+          type: string
+        occurredAt:
+          type: string
+          format: date-time
+    PageAuditResponse:
+      type: object
+      required:
+      - content
+      - page
+      - size
+      - totalElements
+      - totalPages
+      - last
+      properties:
+        content:
+          type: array
+          items:
+            "$ref": "#/components/schemas/AuditResponse"
+        page:
+          type: integer
+          minimum: 0
+        size:
+          type: integer
+        totalElements:
+          type: integer
+          format: int64
+        totalPages:
+          type: integer
+        last:
+          type: boolean
+    Problem:
+      type: object
+      properties:
+        type:
+          type: string
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+        instance:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        fieldErrors:
+          type: object
+          additionalProperties:
+            type: string
+        errorType:
+          type: string
+        sourceReference:
+          type: string
+  responses:
+    Unauthorized:
+      description: Missing or invalid Basic credentials
+      content:
+        application/problem+json:
+          schema:
+            "$ref": "#/components/schemas/Problem"
+    Forbidden:
+      description: Authenticated role cannot access this resource
+      content:
+        application/problem+json:
+          schema:
+            "$ref": "#/components/schemas/Problem"
+    Problem:
+      description: Request failure; RFC 9457 problem details, including 400 validation,
+        404 missing resource, 409 duplicate/conflict, 422 missing parent, or 500 unexpected
+        failure.
+      content:
+        application/problem+json:
+          schema:
+            "$ref": "#/components/schemas/Problem"

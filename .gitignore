@@ -1,0 +1,80 @@
+HELP.md
+.gradle
+build/
+.DS_Store
+**/.DS_Store
+*.log
+.env
+.env.*
+!gradle/wrapper/gradle-wrapper.jar
+!**/src/main/**/build/
+!**/src/test/**/build/
+
+### STS ###
+.apt_generated
+.classpath
+.factorypath
+.project
+.settings
+.springBeans
+.sts4-cache
+bin/
+!**/src/main/**/bin/
+!**/src/test/**/bin/
+
+### IntelliJ IDEA ###
+.idea
+*.iws
+*.iml
+*.ipr
+out/
+!**/src/main/**/out/
+!**/src/test/**/out/
+
+### NetBeans ###
+/nbproject/private/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
+
+### VS Code ###
+.vscode/
+
+# Local tooling and synthetic verification artifacts
+__pycache__/
+*.pyc
+!/.env.example
+
+# Frontend dependencies, builds, test coverage, and tool caches
+node_modules
+dist/
+coverage/
+.nyc_output/
+.cache/
+.vite/
+*.tsbuildinfo
+
+# Python environments used by local tooling
+.venv/
+venv/
+.pytest_cache/
+
+# Local credentials, database snapshots, and crash dumps
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+*.dump
+*.sql.gz
+*.hprof
+*.heapdump
+hs_err_pid*
+
+# Empty npm lockfile at the Gradle root; frontend/package-lock.json is versioned
+/package-lock.json
+
+# Dependency directories and local dependency symlinks
+node_modules

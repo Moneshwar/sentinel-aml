@@ -1,0 +1,16 @@
+{
+  "transactions": 10000,
+  "customers": 100,
+  "accounts": 100,
+  "transport": "100-record JSON batches over HTTP Basic",
+  "database": "PostgreSQL",
+  "detection": "all six rules enabled; 10% jurisdiction hits",
+  "bulk_seconds": 53.178,
+  "target_under_120_seconds": true,
+  "stream_samples": 10,
+  "stream_median_ms": 73.319,
+  "stream_max_ms": 80.967,
+  "persisted_alerts": 100,
+  "run_prefix": "BENCH-2b87eae0",
+  "measured_at": "2026-09-19T07:36:08Z"
+}
