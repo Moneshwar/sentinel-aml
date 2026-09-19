@@ -4,6 +4,8 @@ Java 21 / Spring Boot / PostgreSQL transaction monitoring with a minimal React a
 Parts A and B and the nine business rules are implemented. CSV and JSON batch imports run as durable asynchronous jobs. Redis, Kafka and the challenge's
 remaining Extension Ideas are outside the agreed scope.
 
+**Demo:** [Watch the Sentinel AML walkthrough on Jam](https://jam.dev/c/c1d03ce5-9d78-4930-a9d7-a43dae5a7ad6).
+
 See the [system architecture and engineering guide](docs/architecture.md) for the complete
 component map, ingestion and detection flows, data model, rules, security, APIs, operations,
 and current implementation limits. See [async ingestion](docs/async-ingestion.md) for the 202 response
